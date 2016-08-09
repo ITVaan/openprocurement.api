@@ -47,7 +47,7 @@ tenders_all_view = ViewDefinition('tenders', 'all', '''function(doc) {
 
 
 tenders_by_dateModified_view = ViewDefinition('tenders', 'by_dateModified', '''function(doc) {
-    if(doc.doc_type == 'Tender' && doc.status != 'draft' && doc.status != 'draft.stage2') {
+    if(doc.doc_type == 'Tender' && doc.status != 'draft' && doc.status != 'draft.stage2' ) {
         var fields=%s, data={};
         for (var i in fields) {
             if (doc[fields[i]]) {
