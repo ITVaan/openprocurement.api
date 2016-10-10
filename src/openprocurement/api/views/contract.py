@@ -67,7 +67,7 @@ class TenderAwardContractResource(APIResource):
             self.request.errors.status = 403
             return
         data = self.request.validated['data']
-
+        contract = self.request.validated['contract']
         if data['value']:
             for ro_attr in ('valueAddedTaxIncluded', 'currency'):
                 if data['value'][ro_attr] != getattr(self.context.value, ro_attr):
@@ -76,8 +76,13 @@ class TenderAwardContractResource(APIResource):
                     return
 
             award = [a for a in tender.awards if a.id == self.request.context.awardID][0]
-            if data['value']['amount'] > award.value.amount:
-                self.request.errors.add('body', 'data', 'Value amount should be less or equal to awarded amount ({})'.format(award.value.amount))
+            max_sum = award.value.amount
+            if 'additionalAwardIDs' in contract and contract['additionalAwardIDs']:
+                self.LOGGER.info("!!!!!!addiationAwards")
+                max_sum += sum([award.value.amount for award in tender.awards if award['id'] in contract['additionalAwardIDs']])
+                self.LOGGER.info("!!!!!! max sum {}".format(max_sum))
+            if data['value']['amount'] > max_sum:
+                self.request.errors.add('body', 'data', 'Value amount should be less or equal to awarded amount ({})'.format(max_sum))
                 self.request.errors.status = 403
                 return
 
