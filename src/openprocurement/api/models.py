@@ -426,7 +426,6 @@ class Document(Model):
         'eligibilityCriteria', 'contractProforma', 'commercialProposal',
         'qualificationDocuments', 'eligibilityDocuments', 'registerExtract',
     ])
-
     title = StringType(required=True)  # A title of the document.
     title_en = StringType()
     title_ru = StringType()
