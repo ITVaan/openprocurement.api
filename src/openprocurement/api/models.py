@@ -502,11 +502,7 @@ class Document(Model):
         while root.__parent__ is not None:
             root = root.__parent__
         request = root.request
-        if request.authenticated_role == 'edrapi':
-            role = 'edrapi'
-        else:
-            role = 'edit_{}'.format(request.context.status)
-        return role
+        return 'edrapi' if request.authenticated_role == 'edrapi' else 'edit'
 
 
 class Identifier(Model):
