@@ -1469,13 +1469,10 @@ class Tender(SchematicsDocument, Model):
             if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
                 raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
 
-    # def validate_minimalStep(self, data, value):
-    #     from logging import getLogger
-    #     LOGGER = getLogger(__name__)
-    #     LOGGER.info('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-    #     if not isinstance(data['__parent__'], Model):
-    #         if value.valueAddedTaxPercentage:
-    #             raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
+    def validate_minimalStep(self, data, value):
+        if not isinstance(data['__parent__'], Model):
+            if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
+                raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
 
     @serializable(serialized_name="guarantee", serialize_when_none=False, type=ModelType(Guarantee))
     def tender_guarantee(self):

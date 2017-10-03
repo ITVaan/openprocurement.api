@@ -78,9 +78,8 @@ class TenderAwardResource(APIResource):
         """
         return {'data': [i.serialize("view") for i in self.request.validated['tender'].awards]}
 
-    @json_view(content_type="application/json", permission='view_tender', validators=(validate_award_data,))
+    @json_view(content_type="application/json", permission='create_award', validators=(validate_award_data,))
     def collection_post(self):
-        # FIXME changepermission on 'create_award'
         """Accept or reject bidder application
 
         Creating new Award
