@@ -220,10 +220,10 @@ class Model(SchematicsModel):
 
 
 class Value(Model):
-
     amount = FloatType(required=True, min_value=0)  # Amount as a number.
     currency = StringType(required=True, default=u'UAH', max_length=3, min_length=3)  # The currency in 3-letter ISO 4217 format.
     valueAddedTaxIncluded = BooleanType(required=True, default=True)
+    valueAddedTaxPercentage = IntType(min_value=0, max_value=20)
 
 
 class Guarantee(Model):
@@ -660,6 +660,8 @@ class LotValue(Model):
                 raise ValidationError(u"currency of bid should be identical to currency of value of lot")
             if lot.get('value').valueAddedTaxIncluded != value.valueAddedTaxIncluded:
                 raise ValidationError(u"valueAddedTaxIncluded of bid should be identical to valueAddedTaxIncluded of value of lot")
+            if lot.value.valueAddedTaxPercentage or lot.value.valueAddedTaxPercentage == 0:
+                raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
 
     def validate_relatedLot(self, data, relatedLot):
         if isinstance(data['__parent__'], Model) and relatedLot not in [i.id for i in get_tender(data['__parent__']).lots]:
@@ -746,6 +748,7 @@ class Bid(Model):
     def validate_value(self, data, value):
         if isinstance(data['__parent__'], Model):
             tender = data['__parent__']
+
             if tender.lots:
                 if value:
                     raise ValidationError(u"value should be posted for each lot of bid")
@@ -757,7 +760,15 @@ class Bid(Model):
                 if tender.get('value').currency != value.currency:
                     raise ValidationError(u"currency of bid should be identical to currency of value of tender")
                 if tender.get('value').valueAddedTaxIncluded != value.valueAddedTaxIncluded:
-                    raise ValidationError(u"valueAddedTaxIncluded of bid should be identical to valueAddedTaxIncluded of value of tender")
+                    raise ValidationError(
+                        u"valueAddedTaxIncluded of bid should be identical to valueAddedTaxIncluded of value of tender"
+                    )
+
+                if value.valueAddedTaxIncluded and (value.valueAddedTaxPercentage >= 0) is False:
+                    raise ValidationError({'valueAddedTaxPercentage': [u'This field is required.']})
+
+                if (value.valueAddedTaxPercentage >= 0) is False or value.valueAddedTaxIncluded is False:
+                    value.valueAddedTaxPercentage = 0
 
     def validate_parameters(self, data, parameters):
         if isinstance(data['__parent__'], Model):
@@ -991,6 +1002,11 @@ class Contract(Model):
             if value > get_now():
                 raise ValidationError(u"Contract signature date can't be in the future")
 
+    def validate_value(self, data, value):
+        if value and isinstance(data['__parent__'], Model):
+            if value.valueAddedTaxPercentage != 0 and not value.valueAddedTaxPercentage:
+                raise ValidationError({'valueAddedTaxPercentage': [u'This field is required.']})
+
 
 class Award(Model):
     """ An award for the given procurement. There may be more than one award
@@ -1031,6 +1047,11 @@ class Award(Model):
                 raise ValidationError(u'This field is required.')
             if lotID and lotID not in [i.id for i in data['__parent__'].lots]:
                 raise ValidationError(u"lotID should be one of lots")
+
+    def validate_value(self, data, value):
+        if value and isinstance(data['__parent__'], Model):
+            if value.valueAddedTaxPercentage != 0 and not value.valueAddedTaxPercentage:
+                value.valueAddedTaxPercentage = 0
 
 
 class FeatureValue(Model):
@@ -1134,10 +1155,18 @@ class Lot(Model):
                           currency=self.__parent__.minimalStep.currency,
                           valueAddedTaxIncluded=self.__parent__.minimalStep.valueAddedTaxIncluded))
 
+    def validate_value(self, data, value):
+        if isinstance(data['__parent__'], Model):
+            if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
+                raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
+
     def validate_minimalStep(self, data, value):
         if value and value.amount and data.get('value'):
             if data.get('value').amount < value.amount:
                 raise ValidationError(u"value should be less than value of lot")
+
+        if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
+            raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
 
 
 
@@ -1435,6 +1464,19 @@ class Tender(SchematicsDocument, Model):
                           currency=self.value.currency,
                           valueAddedTaxIncluded=self.value.valueAddedTaxIncluded)) if self.lots else self.value
 
+    def validate_value(self, data, value):
+        if not isinstance(data['__parent__'], Model):
+            if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
+                raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
+
+    # def validate_minimalStep(self, data, value):
+    #     from logging import getLogger
+    #     LOGGER = getLogger(__name__)
+    #     LOGGER.info('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+    #     if not isinstance(data['__parent__'], Model):
+    #         if value.valueAddedTaxPercentage:
+    #             raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
+
     @serializable(serialized_name="guarantee", serialize_when_none=False, type=ModelType(Guarantee))
     def tender_guarantee(self):
         if self.lots:
@@ -1503,6 +1545,9 @@ class Tender(SchematicsDocument, Model):
                 raise ValidationError(u"currency should be identical to currency of value of tender")
             if data.get('value').valueAddedTaxIncluded != value.valueAddedTaxIncluded:
                 raise ValidationError(u"valueAddedTaxIncluded should be identical to valueAddedTaxIncluded of value of tender")
+
+        if value.valueAddedTaxPercentage or value.valueAddedTaxPercentage == 0:
+            raise ValidationError({'valueAddedTaxPercentage': ['Rogue field']})
 
     def validate_tenderPeriod(self, data, period):
         if period and period.startDate and data.get('enquiryPeriod') and data.get('enquiryPeriod').endDate and period.startDate < data.get('enquiryPeriod').endDate:

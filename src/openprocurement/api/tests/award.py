@@ -102,6 +102,20 @@ class TenderAwardResourceTest(BaseTenderWebTest):
             {u'description': [u'lotID should be one of lots'], u'location': u'body', u'name': u'lotID'}
         ])
 
+        response = self.app.post_json(request_path, {
+            'data': {
+                'suppliers': [test_organization],
+                'status': u'pending',
+                'bid_id': self.initial_bids[0]['id'],
+                "value": {"amount": 500, 'valueAddedTaxPercentage': None}
+            }
+        })
+        self.assertEqual(response.status, '201 Created')
+        self.assertEqual(response.content_type, 'application/json')
+        data = response.json['data']
+        self.assertEqual(data['value']['amount'], 500)
+        self.assertEqual(data['value']['valueAddedTaxPercentage'], 0)
+
         response = self.app.post_json('/tenders/some_id/awards', {'data': {
                                       'suppliers': [test_organization], 'bid_id': self.initial_bids[0]['id']}}, status=404)
         self.assertEqual(response.status, '404 Not Found')
@@ -162,10 +176,21 @@ class TenderAwardResourceTest(BaseTenderWebTest):
 
     def test_patch_tender_award(self):
         request_path = '/tenders/{}/awards'.format(self.tender_id)
-        response = self.app.post_json(request_path, {'data': {'suppliers': [test_organization], 'status': u'pending', 'bid_id': self.initial_bids[0]['id'], "value": {"amount": 500}}})
+        response = self.app.post_json(
+            request_path, {
+                'data': {
+                    'suppliers': [test_organization],
+                    'status': u'pending',
+                    'bid_id': self.initial_bids[0]['id'],
+                    "value": {"amount": 500, 'valueAddedTaxPercentage': 0}
+                }
+            }
+        )
         self.assertEqual(response.status, '201 Created')
         self.assertEqual(response.content_type, 'application/json')
         award = response.json['data']
+        self.assertEqual(award['value']['amount'], 500)
+        self.assertEqual(award['value']['valueAddedTaxPercentage'], 0)
 
         #response = self.app.patch_json('/tenders/{}/awards/{}'.format(self.tender_id, award['id']), {"data": {"value": {"amount": 600}}})
         #self.assertEqual(response.status, '200 OK')
@@ -196,6 +221,69 @@ class TenderAwardResourceTest(BaseTenderWebTest):
         self.assertEqual(response.json['errors'], [
             {"location": "body", "name": "awardStatus", "description": "Rogue field"}
         ])
+
+        response = self.app.patch_json(
+            '/tenders/{}/awards/{}'.format(self.tender_id, award['id']),
+            {"data": {"value": {'valueAddedTaxPercentage': 20}}}
+        )
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+
+        response = self.app.get('/tenders/{}/awards/{}'.format(self.tender_id, award['id']))
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+        data = response.json['data']
+
+        # But valueAddedTaxPercentage remained unchanged
+        self.assertEqual(data['value']['valueAddedTaxPercentage'], 0)
+
+        response = self.app.patch_json(
+            '/tenders/{}/awards/{}'.format(self.tender_id, award['id']),
+            {"data": {"value": {'valueAddedTaxPercentage': 100}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                u'description': {u'valueAddedTaxPercentage': [u'Int value should be less than 20.']},
+                u'location': u'body',
+                u'name': u'value'
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/awards/{}'.format(self.tender_id, award['id']),
+            {"data": {"value": {'valueAddedTaxPercentage': -1}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                u'description': {u'valueAddedTaxPercentage': [u'Int value should be greater than 0.']},
+                u'location': u'body',
+                u'name': u'value'
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/awards/{}'.format(self.tender_id, award['id']),
+            {"data": {"value": {'valueAddedTaxPercentage': 'some_value'}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                "location": "body",
+                "name": "value",
+                "description": {"valueAddedTaxPercentage": ["Value 'some_value' is not int."]}
+            }]
+        )
 
         response = self.app.patch_json('/tenders/{}/awards/{}'.format(self.tender_id, award['id']), {"data": {"status": "unsuccessful"}})
         self.assertEqual(response.status, '200 OK')
@@ -247,6 +335,7 @@ class TenderAwardResourceTest(BaseTenderWebTest):
         self.assertEqual(response.status, '200 OK')
         self.assertEqual(response.content_type, 'application/json')
         self.assertEqual(response.json['data']["value"]["amount"], 500)
+        self.assertEqual(response.json['data']['value']['valueAddedTaxPercentage'], 0)
 
         response = self.app.patch_json('/tenders/{}/awards/{}'.format(self.tender_id, award['id']), {"data": {"status": "unsuccessful"}}, status=403)
         self.assertEqual(response.status, '403 Forbidden')
@@ -255,10 +344,21 @@ class TenderAwardResourceTest(BaseTenderWebTest):
 
     def test_patch_tender_award_unsuccessful(self):
         request_path = '/tenders/{}/awards'.format(self.tender_id)
-        response = self.app.post_json(request_path, {'data': {'suppliers': [test_organization], 'status': u'pending', 'bid_id': self.initial_bids[0]['id'], "value": {"amount": 500}}})
+        response = self.app.post_json(
+            request_path, {
+                'data': {
+                    'suppliers': [test_organization],
+                    'status': u'pending',
+                    'bid_id': self.initial_bids[0]['id'],
+                    "value": {"amount": 500, 'valueAddedTaxPercentage': 20}
+                }
+            }
+        )
         self.assertEqual(response.status, '201 Created')
         self.assertEqual(response.content_type, 'application/json')
         award = response.json['data']
+        self.assertEqual(award['value']['amount'], 500)
+        self.assertEqual(award['value']['valueAddedTaxPercentage'], 20)
 
         response = self.app.patch_json('/tenders/{}/awards/{}'.format(self.tender_id, award['id']), {"data": {"status": "unsuccessful"}})
         self.assertEqual(response.status, '200 OK')
@@ -408,7 +508,17 @@ class TenderLotAwardResourceTest(BaseTenderWebTest):
 
     def test_patch_tender_award(self):
         request_path = '/tenders/{}/awards'.format(self.tender_id)
-        response = self.app.post_json(request_path, {'data': {'suppliers': [test_organization], 'status': u'pending', 'bid_id': self.initial_bids[0]['id'], 'lotID': self.initial_lots[0]['id'], "value": {"amount": 500}}})
+        response = self.app.post_json(
+            request_path, {
+                'data': {
+                    'suppliers': [test_organization],
+                    'status': u'pending',
+                    'bid_id': self.initial_bids[0]['id'],
+                    'lotID': self.initial_lots[0]['id'],
+                    "value": {"amount": 500, 'valueAddedTaxPercentage': 20}
+                }
+            }
+        )
         self.assertEqual(response.status, '201 Created')
         self.assertEqual(response.content_type, 'application/json')
         award = response.json['data']
@@ -481,6 +591,7 @@ class TenderLotAwardResourceTest(BaseTenderWebTest):
         self.assertEqual(response.status, '200 OK')
         self.assertEqual(response.content_type, 'application/json')
         self.assertEqual(response.json['data']["value"]["amount"], 500)
+        self.assertEqual(response.json['data']['value']['valueAddedTaxPercentage'], 20)
 
         response = self.app.patch_json('/tenders/{}/awards/{}'.format(self.tender_id, award['id']), {"data": {"status": "unsuccessful"}}, status=403)
         self.assertEqual(response.status, '403 Forbidden')
@@ -489,7 +600,17 @@ class TenderLotAwardResourceTest(BaseTenderWebTest):
 
     def test_patch_tender_award_unsuccessful(self):
         request_path = '/tenders/{}/awards'.format(self.tender_id)
-        response = self.app.post_json(request_path, {'data': {'suppliers': [test_organization], 'status': u'pending', 'bid_id': self.initial_bids[0]['id'], 'lotID': self.initial_lots[0]['id'], "value": {"amount": 500}}})
+        response = self.app.post_json(
+            request_path, {
+                'data': {
+                    'suppliers': [test_organization],
+                    'status': u'pending',
+                    'bid_id': self.initial_bids[0]['id'],
+                    'lotID': self.initial_lots[0]['id'],
+                    "value": {"amount": 500, 'valueAddedTaxPercentage': 0}
+                }
+            }
+        )
         self.assertEqual(response.status, '201 Created')
         self.assertEqual(response.content_type, 'application/json')
         award = response.json['data']
@@ -610,7 +731,17 @@ class Tender2LotAwardResourceTest(BaseTenderWebTest):
 
     def test_patch_tender_award(self):
         request_path = '/tenders/{}/awards'.format(self.tender_id)
-        response = self.app.post_json(request_path, {'data': {'suppliers': [test_organization], 'status': u'pending', 'bid_id': self.initial_bids[0]['id'], 'lotID': self.initial_lots[0]['id'], "value": {"amount": 500}}})
+        response = self.app.post_json(
+            request_path, {
+                'data': {
+                    'suppliers': [test_organization],
+                    'status': u'pending',
+                    'bid_id': self.initial_bids[0]['id'],
+                    'lotID': self.initial_lots[0]['id'],
+                    "value": {"amount": 500, 'valueAddedTaxPercentage': 20}
+                }
+            }
+        )
         self.assertEqual(response.status, '201 Created')
         self.assertEqual(response.content_type, 'application/json')
         award = response.json['data']

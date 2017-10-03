@@ -143,7 +143,8 @@ test_bids = [
         "value": {
             "amount": 469,
             "currency": "UAH",
-            "valueAddedTaxIncluded": True
+            "valueAddedTaxIncluded": True,
+            "valueAddedTaxPercentage": 20
         }
     },
     {
@@ -153,7 +154,8 @@ test_bids = [
         "value": {
             "amount": 479,
             "currency": "UAH",
-            "valueAddedTaxIncluded": True
+            "valueAddedTaxIncluded": True,
+            "valueAddedTaxPercentage": 0
         }
     }
 ]
@@ -484,6 +486,8 @@ class BaseTenderWebTest(BaseWebTest):
             status = response.json['data']['status']
             bids = []
             for i in self.initial_bids:
+                i['value']['valueAddedTaxPercentage'] = 20
+
                 if self.initial_lots:
                     i = i.copy()
                     value = i.pop('value')

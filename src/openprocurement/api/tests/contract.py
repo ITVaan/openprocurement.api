@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import unittest
+from copy import deepcopy
 from datetime import timedelta
 
 from openprocurement.api.models import get_now
@@ -14,8 +15,11 @@ class TenderContractResourceTest(BaseTenderWebTest):
     def setUp(self):
         super(TenderContractResourceTest, self).setUp()
         # Create award
+        value = deepcopy(test_tender_data['value'])
+        value.update({'valueAddedTaxPercentage': 7})
+
         response = self.app.post_json('/tenders/{}/awards'.format(
-            self.tender_id), {'data': {'suppliers': [test_organization], 'status': 'pending', 'bid_id': self.initial_bids[0]['id'], 'value': test_tender_data["value"], 'items': test_tender_data["items"]}})
+            self.tender_id), {'data': {'suppliers': [test_organization], 'status': 'pending', 'bid_id': self.initial_bids[0]['id'], 'value': value, 'items': test_tender_data["items"]}})
         award = response.json['data']
         self.award_id = award['id']
         self.award_value = award['value']
@@ -194,6 +198,109 @@ class TenderContractResourceTest(BaseTenderWebTest):
         self.assertEqual(response.status, '200 OK')
         self.assertEqual(response.json['data']['value']['amount'], 238)
 
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": 0}}}
+        )
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": 21}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                u'description': {u'valueAddedTaxPercentage': [u'Int value should be less than 20.']},
+                u'location': u'body',
+                u'name': u'value'
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": -1}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                u'description': {u'valueAddedTaxPercentage': [u'Int value should be greater than 0.']},
+                u'location': u'body',
+                u'name': u'value'
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": 0.5}}}
+        )
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+
+        response = self.app.get('/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']))
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+        data = response.json['data']
+        self.assertEqual(data['value']['valueAddedTaxPercentage'], 0)
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": 20.5}}}
+        )
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+        data = response.json['data']
+        self.assertEqual(data['value']['valueAddedTaxPercentage'], 20)
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": '7.5'}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                u'description': {u'valueAddedTaxPercentage': [u"Value '7.5' is not int."]},
+                u'location': u'body',
+                u'name': u'value'
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": None}}}, status=422
+        )
+        self.assertEqual(response.status, '422 Unprocessable Entity')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'],
+            [{
+                "location": "body",
+                "name": "value",
+                "description": {"valueAddedTaxPercentage": ["This field is required."]}
+            }]
+        )
+
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": '7'}}}
+        )
+        self.assertEqual(response.status, '200 OK')
+        self.assertEqual(response.content_type, 'application/json')
+        data = response.json['data']
+        self.assertEqual(data['value']['amount'], 238)
+        self.assertEqual(data['value']['valueAddedTaxPercentage'], 7)
+
         response = self.app.patch_json('/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']), {"data": {"dateSigned": i['complaintPeriod']['endDate']}}, status=422)
         self.assertEqual(response.status, '422 Unprocessable Entity')
         self.assertEqual(response.json['errors'], [{u'description': [u'Contract signature date should be after award complaint period end date ({})'.format(i['complaintPeriod']['endDate'])], u'location': u'body', u'name': u'dateSigned'}])
@@ -240,6 +347,18 @@ class TenderContractResourceTest(BaseTenderWebTest):
         self.assertEqual(response.status, '403 Forbidden')
         self.assertEqual(response.json['errors'][0]["description"], "Can't update contract in current (complete) tender status")
 
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']),
+            {"data": {"value": {"valueAddedTaxPercentage": 20}}}, status=403
+        )
+        self.assertEqual(response.status, '403 Forbidden')
+        self.assertEqual(response.content_type, 'application/json')
+        self.assertEqual(response.json['status'], 'error')
+        self.assertEqual(
+            response.json['errors'][0]['description'],
+            u"Can't update contract in current (complete) tender status"
+        )
+
         response = self.app.patch_json('/tenders/{}/contracts/{}'.format(self.tender_id, contract['id']), {"data": {"contractID": "myselfID"}}, status=403)
         self.assertEqual(response.status, '403 Forbidden')
         self.assertEqual(response.json['errors'][0]["description"], "Can't update contract in current (complete) tender status")
@@ -280,6 +399,7 @@ class TenderContractResourceTest(BaseTenderWebTest):
         self.assertEqual(response.content_type, 'application/json')
         self.assertEqual(response.json['data']["status"], "active")
         self.assertEqual(response.json['data']["value"]['amount'], 238)
+        self.assertEqual(response.json['data']['value']['valueAddedTaxPercentage'], 7)
         self.assertEqual(response.json['data']['contractID'], contract['contractID'])
         self.assertEqual(response.json['data']['items'], contract['items'])
         self.assertEqual(response.json['data']['suppliers'], contract['suppliers'])
